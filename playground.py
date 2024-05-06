@@ -2,6 +2,7 @@ import cv2
 import time
 import apriltag
 import numpy as np
+import matplotlib.pyplot as plt
 
 id_2_pose = np.array([1.25095, -0.142785, 0], dtype=np.float32)
 id_3_pose = np.array([1.25095, 0.142785, 0], dtype=np.float32)
@@ -37,32 +38,66 @@ def draw_lines(frame, results):
     
     return frame
 
+def reshape_rot(rot):
+    #in - pitch yaw roll, radians
+    #out - roll pitch yaw, degrees
+
+    return np.array([np.rad2deg(rot[2][0]), np.rad2deg(rot[0][0]), np.rad2deg(rot[1][0])])
+
 def print_results(results):
+    rot = np.zeros(3)
+    trans = np.zeros(3)
+    id = -1
     if(len(results) > 0):
         for i in range(len(results)):
             id = results[i].tag_id
             homography = results[i].homography
-            print(homography)
-            print(type(results[i].corners))
-            corners = results[i].corners
-            corners = corners.astype(np.float32)
-            print(corners)
-            dist_coeffs = np.zeros((5,1))
-            if(id == 2):
-                retval, rvec, tvec = cv2.solvePnP(id_2_pose, corners, camera_matrix, dist_coeffs)
-            if(id == 3):
-                retval, rvec, tvec = cv2.solvePnP(id_3_pose, corners, camera_matrix, dist_coeffs)
-            print(rvec)
-            print(tvec)
+            #print(homography)
+            #print(type(results[i].corners))
+            #corners = results[i].corners
+            #corners = corners.astype(np.float32)
+            #print(corners)
+            #dist_coeffs = np.zeros((5,1))
+            #if(id == 2):
+            #    retval, rvec, tvec = cv2.solvePnP(id_2_pose, corners, camera_matrix, dist_coeffs)
+            #if(id == 3):
+            #    retval, rvec, tvec = cv2.solvePnP(id_3_pose, corners, camera_matrix, dist_coeffs)
+            #print(rvec)
+            #print(tvec)
 
-            #pose = detector.detection_pose(results[i], [fx, fy, cx, cy], tag_size=TAG_SIZE)
-            
-            #print("Detection [" + str(id) + "] Rvec 0: " + str(pose[0][0]))
-            #print("Detection [" + str(id) + "] Rvec 1: " + str(pose[0][1]))
-            #print("Detection [" + str(id) + "] Tvec 0: " + str(pose[0][2]))
-            #print("Detection [" + str(id) + "] Tvec 1: " + str(pose[0][3]))
-            #print("Distance (m): " + str(pose[0][2][3]) + "\n")
+            pose = detector.detection_pose(results[i], [fx, fy, cx, cy], tag_size=TAG_SIZE)
+
+            rodrigues = np.array([pose[0][0][:3], pose[0][1][:3], pose[0][2][:3]])
+            print(rodrigues)
+            rot, _ = cv2.Rodrigues(rodrigues)
+            rot = reshape_rot(rot)
+
+            trans = np.array([pose[0][0][3], pose[0][1][3], pose[0][2][3]])
+            print("Tag ID: " + str(id))
+            print("Rotation vector shape: " + str(rot.shape))
+            print("Rotation vector: " + str(rot))
+            print("Translation vector: " + str(trans))
+            print("Distance (m): " + str(pose[0][2][3]) + "\n")
+            #ax.plot(trans[0], trans[1])
+            #plt.draw()
             #print("Tvec 1: " + str(pose[0][3]))
+    return rot, trans, id
+
+def save_to_csv(poses):
+    with open("data.csv", "w+") as f:
+        f.write("timestamp,id,x,y,z,roll,pitch,yaw\n")
+        for i in range(len(poses)):
+            t = str(poses[i][0])
+            f_id = str(poses[i][1])
+            x = str(poses[i][2])
+            y = str(poses[i][3])
+            z = str(poses[i][4])
+            roll = str(poses[i][5])
+            pitch = str(poses[i][6])
+            yaw = str(poses[i][7])
+            c = ","
+            f.write(t + c + f_id + c + x + c + y + c + z + c + roll + c + pitch + c + yaw + "\n")
+    f.close()
 
 def set_camera_params(cap):
     # get settings
@@ -96,6 +131,13 @@ set_camera_params(cap)
 options = apriltag.DetectorOptions(families="tag36h11")
 detector = apriltag.Detector(options)
 
+#plt.ion()
+#fig, ax = plt.subplots()
+#ax.set_xlim([-2,2])
+#ax.set_ylim([-2,2])
+
+pose = []
+
 while(True):
     if __debug__:
         t1 = time.time()
@@ -114,7 +156,10 @@ while(True):
     if __debug__:
         t2 = time.time()
     #print("Runtime: " + str(t2-t1))
-    print_results(results)
+    rot, trans, r_id = print_results(results)
+    pose.append([t2, r_id, trans[0], trans[1], trans[2], rot[0], rot[1], rot[2]])
+
+save_to_csv(pose)
 
 # When everything done, release the capture
 cap.release() 
