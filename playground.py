@@ -150,16 +150,16 @@ while(True):
     results = detector.detect(gray)
     frame = draw_lines(frame, results)
     # Display the resulting frame
-    cv2.imshow('frame', frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    #cv2.imshow('frame', frame)
+    #if cv2.waitKey(1) & 0xFF == ord('q'):
+    #    break
     if __debug__:
         t2 = time.time()
     #print("Runtime: " + str(t2-t1))
     rot, trans, r_id = print_results(results)
     pose.append([t2, r_id, trans[0], trans[1], trans[2], rot[0], rot[1], rot[2]])
 
-save_to_csv(pose)
+#save_to_csv(pose)
 
 # When everything done, release the capture
 cap.release() 
