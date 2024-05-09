@@ -1,19 +1,30 @@
+# TODO: This is so messy, need to refactor..
+
 import cv2
 import time
 from pupil_apriltags import Detector
 import numpy as np
 import matplotlib.pyplot as plt
 
+# These are the poses of the tags on my wall at the moment
+# 1.25 meters from the floor, 0.142785 meters to the left/right of the center point between each tag, 0 z (depth)
 id_2_pose = np.array([1.25095, -0.142785, 0], dtype=np.float32)
 id_3_pose = np.array([1.25095, 0.142785, 0], dtype=np.float32)
 
 # Camera intrinsics
+# Generated from calibrate_camera.py - Use cap_calib_image.py to capture images
+# TODO: redo this, idk if this is entirely accurate. camera center is a bit off. 
+# Ideally camera center cx,cy is 640, 400 (half of 1280x800)
+# TODO: maybe read from a yaml file or something for this for easy editing
 fx, fy, cx, cy = (941.287545323049, 936.9720277635304, 660.6219235101386, 413.5921687946573)
 camera_matrix = np.array([[fx, 0., cx],[0., fy, cy],[0., 0., 1.]], dtype=np.float32)
 
 # Constants
-TAG_SIZE = 0.1651 # Width in meters
+TAG_SIZE = 0.1651 # Width in meters (of the tag)
 
+### Function definitions ###
+
+# Draw lines around tag to show it's detected (for debugging)
 def draw_lines(frame, results):
     for r in results:
         # extract the bounding box (x, y)-coordinates for the AprilTag
@@ -38,12 +49,19 @@ def draw_lines(frame, results):
     
     return frame
 
+# Rotation matrix is not in the format I like
+# I like roll pitch yaw in degrees
 def reshape_rot(rot):
+    # TODO: Need to test the below after the whole tag->camera pose code addition...
     #in - pitch yaw roll, radians
     #out - roll pitch yaw, degrees
 
     return np.array([np.rad2deg(rot[2][0]), np.rad2deg(rot[1][0]), np.rad2deg(rot[0][0])])
 
+
+# Just a function to print out results so I can easily view data
+# TODO: break this up into a "get camera pose" function and a "print results" function.
+# The print results function is doing all the work right now lol
 def print_results(results):
     rot = np.zeros(3)
     trans = np.zeros(3)
@@ -51,45 +69,38 @@ def print_results(results):
     if(len(results) > 0):
         for i in range(len(results)):
             id = results[i].tag_id
-            homography = results[i].homography
-            #print(homography)
-            #print(type(results[i].corners))
-            #corners = results[i].corners
-            #corners = corners.astype(np.float32)
-            #print(corners)
-            #dist_coeffs = np.zeros((5,1))
-            #if(id == 2):
-            #    retval, rvec, tvec = cv2.solvePnP(id_2_pose, corners, camera_matrix, dist_coeffs)
-            #if(id == 3):
-            #    retval, rvec, tvec = cv2.solvePnP(id_3_pose, corners, camera_matrix, dist_coeffs)
-            #print(rvec)
-            #print(tvec)
 
-            #pose = detector.detection_pose(results[i], [fx, fy, cx, cy], tag_size=TAG_SIZE)
-
-            #print(results[i].pose_R)
-            #print(results[i].pose_t)
-
-            rvec = results[i].pose_R
+            # Good lord, I have no idea what I'm doing here.
+            # So, the "pose" that we get from the AprilTag library is the "tag pose" in camera coordinates?
+            # We want to get camera pose in "object coordinates" or "world coordinates"
+            # So to do that, according to https://stackoverflow.com/questions/18637494/camera-position-in-world-coordinate-from-cvsolvepnp?rq=2
+            # We need to get the transpose of the 3x3 rotation matrix, R'
+            # Then we need to multiply -R' by the translation vector
+            # That will give us the camera pose?
+            # I guess we just take the transpose of R and plug that into cv2.Rodrigues?
+            # We will test when we get home...
+            R = results[i].pose_R
             tvec = results[i].pose_t
 
-            rodrigues = np.array(rvec)
+            R = R.transpose()
+            tvec = -R * tvec
+
+            rodrigues = np.array(R)
             #print(rodrigues)
             rot, _ = cv2.Rodrigues(rodrigues)
             rot = reshape_rot(rot)
 
             trans = np.array([tvec[0][0], tvec[1][0], tvec[2][0]])
             print("Tag ID: " + str(id))
-            #print("Rotation vector shape: " + str(rot.shape))
             print("Pose Error: " + str(results[i].pose_err))
             print("Rotation vector: " + str(rot))
             print("Translation vector: " + str(trans) + "\n")
-            #print("Distance (m): " + str(pose[0][2][3]) + "\n")
-            #ax.plot(trans[0], trans[1])
-            #plt.draw()
-            #print("Tvec 1: " + str(pose[0][3]))
+
+    # Return data for CSV writing        
     return rot, trans, id
 
+
+# TODO: BARF
 def save_to_csv(poses):
     with open("data.csv", "w+") as f:
         f.write("timestamp,id,x,y,z,roll,pitch,yaw\n")
@@ -103,71 +114,74 @@ def save_to_csv(poses):
             pitch = str(poses[i][6])
             yaw = str(poses[i][7])
             c = ","
+            # This line makes me want to.. $*&/@
             f.write(t + c + f_id + c + x + c + y + c + z + c + roll + c + pitch + c + yaw + "\n")
     f.close()
 
 def set_camera_params(cap):
-    # get settings
-    #print(cap.get(cv2.CAP_PROP_AUTO_EXPOSURE))
-    #print(cap.get(cv2.CAP_PROP_EXPOSURE))
-
-    # Set exposure
+    # Set exposure. 1 is manual, 3 is auto
     print("Setting exposure...")
     cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+    # 50 is a good number for decent lighting.
+    # Need to go lower if you want less blur.
+    # 10 or below - might need lighting
     cap.set(cv2.CAP_PROP_EXPOSURE, 50)
 
     # Print exposure after setting
     print("Auto Exposure: " + str(cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)))
     print("Absolute Exposure: " + str(cap.get(cv2.CAP_PROP_EXPOSURE)))
 
-    # Set resolution to 1280x800
+    # Set resolution to 1280x800 - max camera res, we need all the res we can get
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 800)
 
     # Set to MJPG encoding - YUYV does not support 100fps
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 
-# open video0
-cap = cv2.VideoCapture(0)
-time.sleep(1)
-if(not cap.isOpened()):
-    exit
+# TODO: God please make a main function
+# Prayers answered
+def main():
+    # open video0
+    cap = cv2.VideoCapture(0)
+    time.sleep(1)
+    if(not cap.isOpened()):
+        exit
 
-set_camera_params(cap)
+    set_camera_params(cap)
 
-#options = apriltag.DetectorOptions(families="tag36h11")
-detector = Detector(families="tag36h11")
+    # This is old, from apriltag2 library. Options now go in Detector class constructor
+    #options = apriltag.DetectorOptions(families="tag36h11")
+    detector = Detector(families="tag36h11")
 
-#plt.ion()
-#fig, ax = plt.subplots()
-#ax.set_xlim([-2,2])
-#ax.set_ylim([-2,2])
+    pose = []
 
-pose = []
+    while(True):
+        if __debug__:
+            t1 = time.time()
+        # Capture frame-by-frame
+        ret, frame = cap.read()
+        # Convert to GRAY - can we just capture as GRAY?
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-while(True):
-    if __debug__:
-        t1 = time.time()
-    # Capture frame-by-frame
-    ret, frame = cap.read()
-    # Convert to GRAY - can we just capture as GRAY?
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # results is an array with the following shape:
+        results = detector.detect(gray, estimate_tag_pose=True, camera_params=[fx,fy,cx,cy], tag_size=TAG_SIZE)
+        frame = draw_lines(frame, results)
+        # Display the resulting frame
+        #cv2.imshow('frame', frame)
+        #if cv2.waitKey(1) & 0xFF == ord('q'):
+        #    break
+        if __debug__:
+            t2 = time.time()
+        #print("Runtime: " + str(t2-t1))
+        rot, trans, r_id = print_results(results)
+        pose.append([t2, r_id, trans[0], trans[1], trans[2], rot[0], rot[1], rot[2]])
 
-    # results is an array with the following shape:
-    results = detector.detect(gray, estimate_tag_pose=True, camera_params=[fx,fy,cx,cy], tag_size=TAG_SIZE)
-    frame = draw_lines(frame, results)
-    # Display the resulting frame
-    #cv2.imshow('frame', frame)
-    #if cv2.waitKey(1) & 0xFF == ord('q'):
-    #    break
-    if __debug__:
-        t2 = time.time()
-    #print("Runtime: " + str(t2-t1))
-    rot, trans, r_id = print_results(results)
-    pose.append([t2, r_id, trans[0], trans[1], trans[2], rot[0], rot[1], rot[2]])
+    #save_to_csv(pose)
 
-#save_to_csv(pose)
+    # When everything done, release the capture
+    cap.release() 
+    cv2.destroyAllWindows()
 
-# When everything done, release the capture
-cap.release() 
-cv2.destroyAllWindows()
+
+if __name__ == '__main__':
+    main()
