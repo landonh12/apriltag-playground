@@ -25,6 +25,7 @@ class PoseEstimator:
         # +y goes along blue driver station wall
         # +z is up from the floor. Floor is 0 z
         # Yaw rotation is right hand rule. 0 degrees is facing the red alliance driver station.
+        # https://firstfrc.blob.core.windows.net/frc2024/FieldAssets/2024LayoutMarkingDiagram.pdf
         self.tag_coordinates = np.array([[593.68, 9.68, 53.38, 0, 0, 120],
                                         [637.21, 34.79, 53.38, 0, 0, 120],
                                         [652.73, 196.17, 57.13, 0, 0, 180],

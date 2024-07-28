@@ -175,6 +175,8 @@ def main():
         frame = draw_lines(frame, results)
         # Display the resulting frame
         cv2.imshow('frame', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
         if __debug__:
             t2 = time.time()
         #print("Runtime: " + str(t2-t1))
