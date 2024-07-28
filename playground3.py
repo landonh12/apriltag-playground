@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 
 # These are the poses of the tags on my wall at the moment
 # 1.25 meters from the floor, 0.142785 meters to the left/right of the center point between each tag, 0 z (depth)
-id_2_pose = np.array([1.25095, -0.142785, 0], dtype=np.float32)
-id_3_pose = np.array([1.25095, 0.142785, 0], dtype=np.float32)
+id_2_pose = np.array([-0.1397, -1.25095, 0], dtype=np.float32)
+id_3_pose = np.array([0.1397, -1.25095, 0], dtype=np.float32)
 
 # Camera intrinsics
 # Generated from calibrate_camera.py - Use cap_calib_image.py to capture images
@@ -55,7 +55,6 @@ def reshape_rot(rot):
     # TODO: Need to test the below after the whole tag->camera pose code addition...
     #in - pitch yaw roll, radians
     #out - roll pitch yaw, degrees
-
     return np.array([np.rad2deg(rot[2][0]), np.rad2deg(rot[1][0]), np.rad2deg(rot[0][0])])
 
 
@@ -63,8 +62,8 @@ def reshape_rot(rot):
 # TODO: break this up into a "get camera pose" function and a "print results" function.
 # The print results function is doing all the work right now lol
 def print_results(results):
-    rot = np.zeros(3)
-    trans = np.zeros(3)
+    rot = [np.zeros(3), np.zeros(3)]
+    trans = [np.zeros(3), np.zeros(3)]
     id = -1
     if(len(results) > 0):
         for i in range(len(results)):
@@ -79,22 +78,31 @@ def print_results(results):
             # That will give us the camera pose?
             # I guess we just take the transpose of R and plug that into cv2.Rodrigues?
             # We will test when we get home...
-            R = results[i].pose_R
-            tvec = results[i].pose_t
+            rot_vec = results[i].pose_R
+            trans_vec = results[i].pose_t
 
-            R = R.transpose()
-            tvec = -R * tvec
+            rot_vec = rot_vec.transpose()
+            trans_vec = -rot_vec @ trans_vec
 
-            rodrigues = np.array(R)
+            rodrigues = np.array(rot_vec)
             #print(rodrigues)
-            rot, _ = cv2.Rodrigues(rodrigues)
-            rot = reshape_rot(rot)
+            if(id == 2):
+                rot[0], _ = cv2.Rodrigues(rodrigues)
+                rot[0] = reshape_rot(rot[0])
+            if(id == 3):
+                rot[1], _ = cv2.Rodrigues(rodrigues)
+                rot[1] = reshape_rot(rot[1])
 
-            trans = np.array([tvec[0][0], tvec[1][0], tvec[2][0]])
+            if(id == 2):
+                trans[0] = np.array([trans_vec[0][0]+id_2_pose[0], trans_vec[1][0]+id_2_pose[1], trans_vec[2][0]+id_2_pose[2]])
+            if(id == 3):
+                trans[1] = np.array([trans_vec[0][0]+id_3_pose[0], trans_vec[1][0]+id_3_pose[1], trans_vec[2][0]+id_3_pose[2]])
             print("Tag ID: " + str(id))
             print("Pose Error: " + str(results[i].pose_err))
-            print("Rotation vector: " + str(rot))
-            print("Translation vector: " + str(trans) + "\n")
+        trans_avg = (trans[0] + trans[1]) / 2.0
+        rot_avg = (rot[0] + rot[1]) / 2.0
+        print("Rotation vector: " + str(rot_avg))
+        print("Translation vector: " + str(trans_avg) + "\n")
 
     # Return data for CSV writing        
     return rot, trans, id
@@ -125,7 +133,7 @@ def set_camera_params(cap):
     # 50 is a good number for decent lighting.
     # Need to go lower if you want less blur.
     # 10 or below - might need lighting
-    cap.set(cv2.CAP_PROP_EXPOSURE, 50)
+    cap.set(cv2.CAP_PROP_EXPOSURE, 10)
 
     # Print exposure after setting
     print("Auto Exposure: " + str(cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)))
@@ -151,7 +159,7 @@ def main():
 
     # This is old, from apriltag2 library. Options now go in Detector class constructor
     #options = apriltag.DetectorOptions(families="tag36h11")
-    detector = Detector(families="tag36h11")
+    detector = Detector(families="tag36h11", nthreads=2, quad_decimate=1)
 
     pose = []
 
@@ -162,19 +170,16 @@ def main():
         ret, frame = cap.read()
         # Convert to GRAY - can we just capture as GRAY?
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
         # results is an array with the following shape:
         results = detector.detect(gray, estimate_tag_pose=True, camera_params=[fx,fy,cx,cy], tag_size=TAG_SIZE)
         frame = draw_lines(frame, results)
         # Display the resulting frame
-        #cv2.imshow('frame', frame)
-        #if cv2.waitKey(1) & 0xFF == ord('q'):
-        #    break
+        cv2.imshow('frame', frame)
         if __debug__:
             t2 = time.time()
         #print("Runtime: " + str(t2-t1))
         rot, trans, r_id = print_results(results)
-        pose.append([t2, r_id, trans[0], trans[1], trans[2], rot[0], rot[1], rot[2]])
+        #pose.append([t2, r_id, trans[0], trans[1], trans[2], rot[0], rot[1], rot[2]])
 
     #save_to_csv(pose)
 
