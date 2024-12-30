@@ -9,7 +9,7 @@ plot = True
 if(plot):
     plt.rcParams["figure.figsize"] = [7.00, 3.50]
     plt.rcParams["figure.autolayout"] = True
-    #im = plt.imread("field.jpg")
+    #im = plt.imread("resources/field.jpg")
     #plt.imshow(im, extent=[0, 16.4846, 0, 8.1026])
     plt.plot(0, 0, "o")
     plt.ion()

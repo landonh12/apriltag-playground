@@ -11,7 +11,7 @@ class PoseEstimator:
     def __init__(self, exposure=1, res_width=1280, res_height=800, debug=False):
         # Camera Intrinsics
         # Arducam intrinsics
-        self.camera_params = [941.287545323049, 936.9720277635304, 640.0, 400.0]
+        self.camera_params = [941.287545323049, 936.9720277635304, 660.6219235101386, 413.5921687946573]
         #self.camera_params = (np.float64(674.3181908199018), np.float64(667.4179040814125), np.float64(1018.1982259356148), np.float64(248.77678435183148))
         self.detector = Detector(families="tag36h11", nthreads=4, quad_decimate=1)
         self.exposure = exposure
