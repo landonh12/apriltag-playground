@@ -4,27 +4,19 @@ from pupil_apriltags import Detector
 import time
 import math
 import subprocess
-from TagPoseKalmanFilter import TagPoseKalmanFilter
+#from TagPoseKalmanFilter import TagPoseKalmanFilter
 
 class PoseEstimator:
 
-    def __init__(self, exposure=1, res_width=1280, res_height=800, debug=False):
+    def __init__(self, debug=False):
         # Camera Intrinsics
         # Arducam intrinsics
         self.camera_params = [941.287545323049, 936.9720277635304, 660.6219235101386, 413.5921687946573]
         #self.camera_params = (np.float64(674.3181908199018), np.float64(667.4179040814125), np.float64(1018.1982259356148), np.float64(248.77678435183148))
         self.detector = Detector(families="tag36h11", nthreads=4, quad_decimate=1)
-        self.exposure = exposure
-        self.res_width = 1280
-        self.res_height = 800
         self.TAG_SIZE = 0.1651
         self.debug = debug
         self.cap = []
-        self.cap.append(self.__setup_camera(0))
-        self.cap.append(self.__setup_camera(1))
-        self.pose_buffer = []
-        self.kalman_filter = TagPoseKalmanFilter()
-        self.previous_detections = []
         # Tag coordinates are indexed by ID + 1 (i.e. index 0 is tag 1).
         # Format is X Y Z Roll Pitch Yaw
         # Units are inches and degrees
@@ -33,7 +25,7 @@ class PoseEstimator:
         # +y goes along blue driver station wall
         # +z is up from the floor. Floor is 0 z
         # Yaw rotation is right hand rule. 0 degrees is facing the red alliance driver station.
-        # https://firstfrc.blob.core.windows.net/frc2024/FieldAssets/2024LayoutMarkingDiagram.pdf
+        # https://firstfrc.blob.core.windows.net/frc2025/FieldAssets/2025FieldDrawings-FieldLayoutAndMarking.pdf
         self.tag_coordinates = np.zeros((16,6))
         # 0.1651 meters = 6.5 inches
         self.tag_coordinates[2] = [17 + (1/8), 0, 16, 0, 0, 0]
@@ -60,16 +52,16 @@ class PoseEstimator:
         '''
 
     # returns cap
-    def __setup_camera(self, port=0):
+    def setup_camera(self, port=0, exposure=10, res_width=1280, res_height=800):
         cap = cv2.VideoCapture(port)
         print(cap)
         cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
-        cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.res_width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.res_height)
+        cap.set(cv2.CAP_PROP_EXPOSURE, exposure)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, res_width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, res_height)
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
         #self.ffmpeg_process = self.open_ffmpeg()
-        return cap
+        self.cap.append(cap)
 
     # returns tag results
     def __find_tags(self, camera):
@@ -131,12 +123,6 @@ class PoseEstimator:
         num_detections = 0
         results = self.__find_tags(camera)
         detections = np.zeros((16,6))
-
-        if(len(results) == 0):
-            self.kalman_filter.P *= 1.05  # Inflate covariance to increase uncertainty
-            self.kalman_filter.predict()
-            return self.kalman_filter.get_state()
-        
         if(len(results) > 0):
             for i in range(len(results)):
                 # Save ID
@@ -207,17 +193,17 @@ class PoseEstimator:
                 #z = np.array([trans_vec[0], trans_vec[1], trans_vec[2], rot_vec[0], rot_vec[1], rot_vec[2]])
 
                 print("updating kalman filter")
-                self.kalman_filter.update(detections[id])
+                #self.kalman_filter.update(detections[id])
         
-        ''' Old averaging sensor fusion - remove
+        #Old averaging sensor fusion - remove
         fused_detections = np.zeros(6)
         for i in range(len(fused_detections)):
             for j in range(len(detections)):
                 fused_detections[i] = fused_detections[i] + detections[j][i]
             fused_detections[i] = fused_detections[i] / num_detections
-        '''     
-        self.kalman_filter.predict()
-        fused_detections = self.kalman_filter.get_state()
+             
+        #self.kalman_filter.predict()
+        #fused_detections = self.kalman_filter.get_state()
 
         return fused_detections
 

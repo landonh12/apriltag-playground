@@ -1,11 +1,12 @@
-import PoseEstimator
-import matplotlib.pyplot as plt
+from PoseEstimator import PoseEstimator
+#import matplotlib.pyplot as plt
 import os
 
-estimator = PoseEstimator.PoseEstimator(debug=True)
-plot = True
+estimator = PoseEstimator.PoseEstimator()
+estimator.setup_camera()
+plot = False
 
-
+'''
 if(plot):
     plt.rcParams["figure.figsize"] = [7.00, 3.50]
     plt.rcParams["figure.autolayout"] = True
@@ -15,7 +16,7 @@ if(plot):
     plt.ion()
     plt.show()
     plt.pause(1e-10)
-
+'''
 
 while True:
     #pose_front = estimator.get_camera_pose(0, 'front')
@@ -42,6 +43,7 @@ while True:
     print("y: %.2f" % pose2[5])
     '''
 
+    '''
     if(plot):
         plt.clf()
         plt.plot(pose1[0], pose1[1], "o")
@@ -51,3 +53,4 @@ while True:
         plt.ylim(-10, 10)
         plt.show()
         plt.pause(1e-20)
+    '''
